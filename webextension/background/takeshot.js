@@ -1,10 +1,10 @@
-/* globals communication, shot, main, chrome, makeUuid, clipboard, auth, catcher, analytics */
+/* globals communication, shot, main, chrome, makeUuid, auth, catcher, analytics, browser */
 
 window.takeshot = (function () {
   let exports = {};
   const Shot = shot.AbstractShot;
-  const { sendEvent } = analytics; 
-  const pasteSymbol = 
+  const { sendEvent } = analytics;
+  const pasteSymbol =
   (window.navigator.platform.match(/Mac/i)) ? "\u2318" : "Ctrl";
 
   communication.register("takeShot", (options) => {
@@ -12,6 +12,7 @@ window.takeshot = (function () {
     shot = new Shot(main.getBackend(), shotId, shot);
     shot.deviceId = auth.getDeviceId();
     let capturePromise = Promise.resolve();
+    let openedTab;
     if (! shot.clipNames().length) {
       // canvas.drawWindow isn't available, so we fall back to captureVisibleTab
       capturePromise = screenshotPage(selectedPos, scroll).then((dataUrl) => {
@@ -31,6 +32,9 @@ window.takeshot = (function () {
       });
     }
     return catcher.watchPromise(capturePromise.then(() => {
+      return browser.tabs.create({url: shot.creatingUrl})
+    }).then((tab) => {
+      openedTab = tab;
       return uploadShot(shot);
     }).then(() => {
       let id = makeUuid();
@@ -41,7 +45,8 @@ window.takeshot = (function () {
         message: "The link to your shot has been copied to the clipboard. Press "
         + pasteSymbol + "-V to paste."
       });
-      chrome.tabs.create({url: shot.viewUrl});
+      return browser.tabs.update(openedTab.id, {url: shot.viewUrl});
+    }).then(() => {
       return shot.viewUrl;
     }));
   });
